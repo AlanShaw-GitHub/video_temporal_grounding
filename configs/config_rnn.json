@@ -1,0 +1,37 @@
+{
+    "learning_rate": 1e-3,
+    "lr_decay_n_iters": 3000,
+    "lr_decay_rate": 0.8,
+    "max_epoches": 1000,
+    "early_stopping": 5,
+    "cache_dir": "../results/rnn/",
+    "display_batch_interval": 100,
+    "evaluate_interval": 5,
+
+
+    "regularization_beta": 1e-7,
+    "dropout_prob": 0.8,
+
+    "batch_size": 64,
+
+    "input_video_dim": 500,
+    "max_frames": 200,
+    "input_ques_dim": 300,
+    "max_words": 20,
+    "hidden_size": 256,
+
+    "word2vec": "/home1/zhangzhu/data/word2vec/word2vec.bin",
+
+
+    "is_origin_dataset": true,
+    "train_json": "../data/activity-net/train.json",
+    "val_json": "../data/activity-net/val_1.json",
+    "test_json": "../data/activity-net/val_2.json",
+    "train_data": "../data/activity-net/train_data.json",
+    "val_data": "../data/activity-net/val_data.json",
+    "test_data": "../data/activity-net/test_data.json",
+    "feature_path":"/home1/zhangzhu/data/activity-c3d/",
+    "feature_path_tsn":"/home1/zhangzhu/data/tsn_score"
+
+
+}

@@ -1,0 +1,10 @@
+TACOS: train 75/1604 val 27/964 test 25/722  127
+
+Activity-net: c3d 411.97684305291585（8 frames of each unit） 截断到768  [64, 128,256,512](也就是[8，16，32，64]) 75% overlap
+
+
+baseline 0.06 0.17 0.26 0.58
+
+rnn best 0.178 0.372 / 0.188 0.384 0.3406 0.4672
+
+rnn full training  0.2122 0.4129 0.3714 0.4946
