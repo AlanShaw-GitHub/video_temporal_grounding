@@ -2,7 +2,6 @@ import sys
 sys.path.append('..')
 import numpy as np
 
-
 '''
 calculate temporal intersection over union
 '''
@@ -21,7 +20,6 @@ def calculate_nIoL(base, sliding_clip):
     length = sliding_clip[1]-sliding_clip[0]
     nIoL = 1.0*(length-inter_l)/length
     return nIoL
-
 
 def nms_temporal(predict_score, predict_windows, overlap):
     pick = list()
@@ -71,9 +69,9 @@ def compute_IoU_recall_top_n(predict_windows, gt_windows, picks, top_n, IoU_thre
 
 def compute_IoU_recall(predict_score, predict_windows, gt_windows):
 
-    IoU_threshs = [0.5, 0.7]
-    top_n_list = [1,5]
-    topn_IoU_matric = np.zeros([2, 2],dtype=np.float32)
+    IoU_threshs = [0.1,0.3,0.5, 0.7]
+    top_n_list = [1]
+    topn_IoU_matric = np.zeros([1, 4],dtype=np.float32)
 
     for i, IoU_thresh in enumerate(IoU_threshs):
         picks = nms_temporal(predict_score, predict_windows, IoU_thresh-0.05)
