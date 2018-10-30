@@ -2,7 +2,7 @@ import sys
 sys.path.append('..')
 import json
 from dataloaders.dataloader_skip import Loader
-from models.model_base import Model
+from models.model_skip import Model
 import torch
 from torch.utils.data import Dataset, DataLoader
 import time
@@ -41,7 +41,7 @@ class Trainer(object):
                                            {'params': bias_p, 'weight_decay': 0}
                                            ], lr=self.params['learning_rate'])
 
-        self.model_path = os.path.join(self.params['cache_dir']+'_base')
+        self.model_path = os.path.join(self.params['cache_dir']+'_skip')
         if not os.path.exists(self.model_path):
             print('create path: ', self.model_path)
             os.makedirs(self.model_path)
@@ -127,7 +127,7 @@ class Trainer(object):
             idxs = idxs.to(self.device)
 
             # Forward pass
-            batch_loss, predict_score, predict_reg = self.model(frame_vecs, frame_n, ques_vecs, labels, regs, idxs)
+            batch_loss, predict_score = self.model(frame_vecs, frame_n, ques_vecs, labels, regs, idxs)
 
             # Backward and optimize
             self.optimizer.zero_grad()
@@ -172,12 +172,12 @@ class Trainer(object):
             batch_size = len(frame_vecs)
 
             # Forward pass
-            batch_loss, predict_score, predict_reg = self.model(frame_vecs, frame_n, ques_vecs, labels, regs, idxs)
+            batch_loss, predict_score = self.model(frame_vecs, frame_n, ques_vecs, labels, regs, idxs)
             predict_score = predict_score.detach().cpu().numpy()
-            predict_reg = predict_reg.detach().cpu().numpy()
 
             for i in range(batch_size):
-                predict_windows = predict_reg[i] + windows[i]
+                predict_windows = windows[i]
+                # predict_windows = predict_reg[i] + windows[i]
                 result = criteria.compute_IoU_recall(predict_score[i], predict_windows, gt_windows[i])
                 all_correct_num_topn_IoU += result
 

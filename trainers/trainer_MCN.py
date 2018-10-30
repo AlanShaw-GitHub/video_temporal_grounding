@@ -1,8 +1,8 @@
 import sys
 sys.path.append('..')
 import json
-from dataloaders.dataloader_skip import Loader
-from models.model_base import Model
+from dataloaders.dataloader_base import Loader
+from models.model_MCN import Model
 import torch
 from torch.utils.data import Dataset, DataLoader
 import time
@@ -21,9 +21,9 @@ class Trainer(object):
 
         self.model = Model(params, self.device).to(self.device)
 
-        train_dataset = Loader(params, params['train_data'], params['train_ques_file'], self.word2vec, flag=True)
-        val_dataset = Loader(params, params['val_data'], params['val_ques_file'], self.word2vec)
-        test_dataset = Loader(params, params['test_data'], params['test_ques_file'], self.word2vec)
+        train_dataset = Loader(params, params['train_data'], self.word2vec, flag=True)
+        val_dataset = Loader(params, params['val_data'], self.word2vec)
+        test_dataset = Loader(params, params['test_data'], self.word2vec)
 
 
         self.train_loader = DataLoader(dataset=train_dataset, batch_size=64, shuffle=True)
@@ -41,7 +41,7 @@ class Trainer(object):
                                            {'params': bias_p, 'weight_decay': 0}
                                            ], lr=self.params['learning_rate'])
 
-        self.model_path = os.path.join(self.params['cache_dir']+'_base')
+        self.model_path = os.path.join(self.params['cache_dir'])
         if not os.path.exists(self.model_path):
             print('create path: ', self.model_path)
             os.makedirs(self.model_path)
@@ -118,16 +118,18 @@ class Trainer(object):
 
         loss_sum = 0
         t1 = time.time()
-        for i_batch, (frame_vecs, frame_n, ques_vecs, labels, regs, idxs, windows, gt_windows) in enumerate(self.train_loader):
+        for i_batch, (frame_vecs, frame_n, ques_vecs, ques_n, labels, regs, idxs, windows, gt_windows) in enumerate(self.train_loader):
             frame_vecs = frame_vecs.to(self.device)
             frame_n = frame_n.to(self.device)
             ques_vecs = ques_vecs.to(self.device)
+            ques_n = ques_n.to(self.device)
             labels = labels.to(self.device)
             regs = regs.to(self.device)
+            windows = windows.to(self.device)
             idxs = idxs.to(self.device)
 
             # Forward pass
-            batch_loss, predict_score, predict_reg = self.model(frame_vecs, frame_n, ques_vecs, labels, regs, idxs)
+            batch_loss, predict_score = self.model(frame_vecs, frame_n, ques_vecs, ques_n, labels, regs, idxs, windows / 384)
 
             # Backward and optimize
             self.optimizer.zero_grad()
@@ -162,22 +164,25 @@ class Trainer(object):
         all_retrievd = 0.0
 
         self.model.eval()
-        for i_batch, (frame_vecs, frame_n, ques_vecs, labels, regs, idxs, windows, gt_windows) in enumerate(data_loader):
+        for i_batch, (frame_vecs, frame_n, ques_vecs, ques_n, labels, regs, idxs, windows, gt_windows) in enumerate(data_loader):
             frame_vecs = frame_vecs.to(self.device)
             frame_n = frame_n.to(self.device)
             ques_vecs = ques_vecs.to(self.device)
+            ques_n = ques_n.to(self.device)
             labels = labels.to(self.device)
             regs = regs.to(self.device)
+            _windows = windows
+            windows = windows.to(self.device)
             idxs = idxs.to(self.device)
             batch_size = len(frame_vecs)
 
             # Forward pass
-            batch_loss, predict_score, predict_reg = self.model(frame_vecs, frame_n, ques_vecs, labels, regs, idxs)
+            batch_loss, predict_score = self.model(frame_vecs, frame_n, ques_vecs, ques_n, labels, regs, idxs, windows / 384)
             predict_score = predict_score.detach().cpu().numpy()
-            predict_reg = predict_reg.detach().cpu().numpy()
 
             for i in range(batch_size):
-                predict_windows = predict_reg[i] + windows[i]
+                predict_windows = _windows[i]
+                # predict_windows = predict_reg[i] + windows[i]
                 result = criteria.compute_IoU_recall(predict_score[i], predict_windows, gt_windows[i])
                 all_correct_num_topn_IoU += result
 
@@ -188,7 +193,7 @@ class Trainer(object):
         print(avg_correct_num_topn_IoU)
         print('=================================')
 
-        acc = avg_correct_num_topn_IoU[0,2]
+        acc = avg_correct_num_topn_IoU[0,0]
 
         return acc
 

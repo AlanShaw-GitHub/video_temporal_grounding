@@ -1,7 +1,7 @@
 import sys
 sys.path.append('..')
 import json
-from dataloaders.dataloader_skip import Loader
+from dataloaders.dataloader_base import Loader
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -50,7 +50,7 @@ class Model(nn.Module):
             nn.ReLU())
 
         self.conv_top = nn.Sequential(
-            nn.Conv1d(self.hidden_size,self.hidden_size,kernel_size=3, stride=1, padding=1),
+            nn.Conv1d(self.hidden_size,self.hidden_size,kernel_size=384),
             nn.BatchNorm1d(self.hidden_size),
             nn.ReLU())
 
@@ -59,12 +59,9 @@ class Model(nn.Module):
 
         self.fc_base = nn.Linear(self.hidden_size * 4 , self.hidden_size)
         self.fc_score = nn.Linear(self.hidden_size, 1)
-        self.fc_reg = nn.Linear(self.hidden_size, 2)
-        self.linear = nn.Linear(self.params['skip_thoughts_dim'],self.hidden_size)
+        self.cosinesimilarity = nn.CosineSimilarity(dim = 2)
 
-        self.calculate_reg_loss = nn.SmoothL1Loss(reduction='elementwise_mean')
-
-    def forward(self, frame_vecs, frame_n, ques_vecs, labels, regs, idxs):
+    def forward(self, frame_vecs, frame_n, ques_vecs, ques_n, labels, regs, idxs):
 
         frame_vecs = torch.transpose(frame_vecs, 1, 2)
         conv_bottom_out = self.conv_bottom(frame_vecs)
@@ -72,42 +69,40 @@ class Model(nn.Module):
         conv_encoder_128_out = self.conv_encoder_128(conv_bottom_out)
         conv_encoder_256_out = self.conv_encoder_256(conv_bottom_out)
         conv_encoder_512_out = self.conv_encoder_512(conv_bottom_out)
-        conv_top_64_out = self.conv_top(conv_encoder_64_out)
-        conv_top_128_out = self.conv_top(conv_encoder_128_out)
-        conv_top_256_out = self.conv_top(conv_encoder_256_out)
-        conv_top_512_out = self.conv_top(conv_encoder_512_out)
-        conv_encoder_out = torch.cat((conv_top_64_out, conv_top_128_out, conv_top_256_out, conv_top_512_out),dim=2)
+        # conv_top_64_out = self.conv_top(conv_encoder_64_out)
+        # conv_top_128_out = self.conv_top(conv_encoder_128_out)
+        # conv_top_256_out = self.conv_top(conv_encoder_256_out)
+        # conv_top_512_out = self.conv_top(conv_encoder_512_out)
+        conv_encoder_out = torch.cat((conv_encoder_64_out, conv_encoder_128_out, conv_encoder_256_out, conv_encoder_512_out),dim=2)
         conv_encoder_out = torch.transpose(conv_encoder_out, 1, 2)
 
         # Set initial hidden and cell states
 
-        # _, idx_sort = torch.sort(ques_n, dim=0, descending=True)
-        # _, idx_unsort = torch.sort(idx_sort, dim=0)
+        _, idx_sort = torch.sort(ques_n, dim=0, descending=True)
+        _, idx_unsort = torch.sort(idx_sort, dim=0)
 
-        # ques = ques_vecs.index_select(0, idx_sort)
-        # lengths = list(ques_n[idx_sort])
-        # ques_packed = nn.utils.rnn.pack_padded_sequence(ques, lengths=lengths, batch_first=True)
+        ques = ques_vecs.index_select(0, idx_sort)
+        lengths = list(ques_n[idx_sort])
+        ques_packed = nn.utils.rnn.pack_padded_sequence(ques, lengths=lengths, batch_first=True)
 
-        # h0 = torch.zeros(1, ques_vecs.size(0), self.hidden_size).to(self.device)
-        # ques_padded, ques_hidden = self.ques_rnn(ques_packed, h0)
+        h0 = torch.zeros(1, ques_vecs.size(0), self.hidden_size).to(self.device)
+        ques_padded, ques_hidden = self.ques_rnn(ques_packed, h0)
 
-        # ques_padded = nn.utils.rnn.pad_packed_sequence(ques_padded, batch_first=True)
-        # ques_out = ques_padded[0].index_select(0, idx_unsort)
-        # ques_hidden = ques_hidden.squeeze(0)
-        # ques_hidden = ques_hidden.unsqueeze(1).expand(-1, conv_encoder_out.size(1), -1)
-        ques_vecs = self.linear(ques_vecs)
-        ques_hidden = ques_vecs.expand(-1, conv_encoder_out.size(1), -1)
+        ques_padded = nn.utils.rnn.pad_packed_sequence(ques_padded, batch_first=True)
+        ques_out = ques_padded[0].index_select(0, idx_unsort)
+        ques_hidden = ques_hidden.squeeze(0)
+        ques_hidden = ques_hidden.unsqueeze(1).expand(-1, conv_encoder_out.size(1), -1)
         
-        fused_add = ques_hidden + conv_encoder_out
-        fused_mul = ques_hidden * conv_encoder_out
-        fused_cat = torch.cat((ques_hidden, conv_encoder_out), dim = 2)
-        fused_all = torch.cat((fused_add, fused_mul, fused_cat), dim = 2)
+        # fused_add = ques_hidden + conv_encoder_out
+        # fused_mul = ques_hidden * conv_encoder_out
+        # fused_cat = torch.cat((ques_hidden, conv_encoder_out), dim = 2)
+        # fused_all = torch.cat((fused_add, fused_mul, fused_cat), dim = 2)
 
-        fused_all = self.fc_base(fused_all)
-        score = self.fc_score(fused_all)
-        score = nn.functional.softmax(score.squeeze(2),1)
-        predict_reg = self.fc_reg(fused_all)
-
+        # fused_all = self.fc_base(fused_all)
+        # score = self.fc_score(fused_all)
+        # score = nn.functional.softmax(score.squeeze(2),1)
+        score = self.cosinesimilarity(ques_hidden,conv_encoder_out)
+        score = nn.functional.softmax(score,1)
         idxs = idxs.squeeze()
 
         flag = (labels - 0.5) * (-2)
@@ -122,13 +117,10 @@ class Model(nn.Module):
         pos_loss = -torch.log(score[raw_index, idxs])
         all_score_loss = torch.mean(pos_loss, 0)
 
-        pos_reg = predict_reg[raw_index, idxs]
-        reg_loss = self.calculate_reg_loss(pos_reg,regs)
-
-        all_loss = all_score_loss + 0.001 * reg_loss
+        all_loss = all_score_loss
 
 
-        return  all_loss, score, predict_reg
+        return  all_loss, score
 
 
 if __name__ == '__main__':

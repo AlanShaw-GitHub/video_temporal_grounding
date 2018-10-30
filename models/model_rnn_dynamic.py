@@ -36,6 +36,8 @@ class Model(object):
         self.is_training = tf.placeholder(tf.bool)
         self.gt_predict = tf.placeholder(tf.float32, [None, self.max_frames])
 
+
+        # self.max_frames = tf.reduce_max(self.frame_len)
         self.frame_mask = tf.sequence_mask(self.frame_len, maxlen=self.max_frames)
         self.ques_mask = tf.sequence_mask(self.ques_len, maxlen=self.max_words)
 
@@ -91,8 +93,12 @@ class Model(object):
         with tf.variable_scope("Output_Layer"):
 
             logit_score = layers.linear_layer_3d(model_outputs, 1, scope_name='output_layer')
+            # logit_score = tf.layers.dense(model_outputs, 1, name='output_layer')
+
             logit_score = tf.squeeze(logit_score, 2)
             logit_loss = tf.nn.sigmoid_cross_entropy_with_logits(logits= logit_score, labels=self.gt_predict)
+            mask = tf.cast(self.frame_mask, tf.float32)
+            logit_loss = tf.multiply(logit_loss, mask)
             avg_logit_loss = tf.reduce_mean(tf.reduce_sum(logit_loss,1))
 
             variables = tf.trainable_variables()
@@ -101,9 +107,15 @@ class Model(object):
             self.loss = avg_logit_loss + self.regularization_beta * regularization_cost
             self.frame_score = tf.nn.sigmoid(logit_score)
 
+
+
+
 if __name__ == '__main__':
 
     config_file = '../configs/config_rnn.json'
 
     with open(config_file, 'r') as fr:
         config = json.load(fr)
+
+
+
